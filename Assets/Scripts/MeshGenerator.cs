@@ -1,81 +1,71 @@
 using UnityEngine;
-[RequireComponent(typeof(MeshFilter))]
-public class MeshGenerator : MonoBehaviour
+
+public static class MeshGenerator
 {
-    public Mesh mesh;
-
-    Vector3[] vertices;
-    int[] triangles;
-
-    public int xsize = 20;
-    public int zsize = 20;
-
-    void Start()
+    public static MeshData GenerateTerrainMesh(float[,] heightMap, float heightMultiplier, AnimationCurve heightCurve, int levelOfDetail)
     {
-        mesh = new Mesh();
-        GetComponent<MeshFilter>().mesh = mesh;
-        
-        CreateShape();
-        UpdateMesh();
-    }
+        int width = heightMap.GetLength(0);
+        int height = heightMap.GetLength(1);
+        float topLeftX = (width - 1) / -2f;
+        float topLeftZ = (height - 1) / 2f;
 
-    void CreateShape()
-    {
-        vertices = new Vector3[(xsize + 1) * (zsize + 1)];
+        int meshsimplificationIncrement = (levelOfDetail == 0) ? 1 : levelOfDetail * 2;
+        int verticesPerLine = (width - 1) / meshsimplificationIncrement + 1;
 
-        for (int i = 0, z = 0; z <= zsize; z++)
+        MeshData meshData = new MeshData(verticesPerLine, verticesPerLine);
+        int vertexIndex = 0;
+
+        for (int y = 0; y < height; y+=meshsimplificationIncrement)
         {
-            for (int x = 0; x <= xsize; x++)
+            for(int x = 0; x < width; x+=meshsimplificationIncrement)
             {
-                vertices[i] = new Vector3(x, 0, z);
-                i++;
+                meshData.vertices [vertexIndex] = new Vector3(topLeftX + x, heightCurve.Evaluate(heightMap[x, y]) * heightMultiplier, topLeftZ - y);
+                meshData.uvs[vertexIndex] = new Vector2(x / (float)width, y / (float)height);
+
+                if (x < width - 1 && y < height - 1)
+                {
+                    meshData.AddTriangle(vertexIndex, vertexIndex + verticesPerLine + 1, vertexIndex + verticesPerLine);
+                    meshData.AddTriangle(vertexIndex + verticesPerLine + 1, vertexIndex, vertexIndex + 1);
+                }
+
+                vertexIndex++;
             }
         }
-
-        triangles = new int[xsize * zsize * 6];
-
-        int vert = 0;
-        int tris = 0;
-
-        for (int z = 0; z < zsize; z++)
-        {
-            for (int x = 0; x < xsize; x++)
-            {
-                triangles[tris + 0] = vert + 0;
-                triangles[tris + 1] = vert + xsize + 1;
-                triangles[tris + 2] = vert + 1;
-                triangles[tris + 3] = vert + 1;
-                triangles[tris + 4] = vert + xsize + 1;
-                triangles[tris + 5] = vert + xsize + 2;
-
-                vert++;
-                tris += 6;
-            }
-            vert++;
-        }
-
-
+        return meshData;
     }
 
-    void UpdateMesh()
-    {
-        mesh.Clear();
+}
 
+public class MeshData
+{
+    public Vector3[] vertices;
+    public int[] triangles;
+    public Vector2[] uvs;
+
+    int triangleIndex;
+
+    public MeshData(int meshWidth, int meshHeight)
+    {
+        vertices = new Vector3[meshWidth * meshHeight];
+        uvs = new Vector2[meshWidth * meshHeight];
+        triangles = new int[(meshWidth - 1) * (meshHeight - 1) * 6];
+    }
+
+    public void AddTriangle(int a, int b, int c)
+    {
+        triangles[triangleIndex] = a;
+        triangles[triangleIndex + 1] = b;
+        triangles[triangleIndex + 2] = c;
+        triangleIndex += 3;
+    }
+
+    public Mesh CreateMesh()
+    {
+        Mesh mesh = new Mesh();
         mesh.vertices = vertices;
         mesh.triangles = triangles;
-
+        mesh.uv = uvs;
         mesh.RecalculateNormals();
-    }
-
-    void OnDrawGizmos()
-    {
-        if (vertices == null)
-        {
-            return;
-        }
-        for (int i = 0; i < vertices.Length; i++)
-        {
-            Gizmos.DrawSphere(vertices[i], 0.1f);
-        }
+        return mesh;
     }
 }
